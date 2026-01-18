@@ -263,7 +263,7 @@ const VehicleRecognitionSystem = () => {
       // 2. Detect Vehicle
       setStatus("Identifying Vehicle...");
       const vRes = await fetch(
-        `/api/roboflow/${MODEL_VEHICLE}?api_key=${ROBOFLOW_API_KEY}`,
+        `https://detect.roboflow.com/${MODEL_VEHICLE}?api_key=${ROBOFLOW_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -280,7 +280,7 @@ const VehicleRecognitionSystem = () => {
       // 3. Detect Color
       setStatus("Analyzing Color...");
       const cRes = await fetch(
-        `/api/roboflow/${MODEL_COLOR}?api_key=${ROBOFLOW_API_KEY}`,
+        `https://detect.roboflow.com/${MODEL_COLOR}?api_key=${ROBOFLOW_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -296,7 +296,7 @@ const VehicleRecognitionSystem = () => {
       // 4. Detect Plate
       setStatus("Locating Plate...");
       let pRes = await fetch(
-        `/api/roboflow/${MODEL_PLATE}?api_key=${ROBOFLOW_API_KEY}`,
+        `https://detect.roboflow.com/${MODEL_PLATE}?api_key=${ROBOFLOW_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -311,7 +311,7 @@ const VehicleRecognitionSystem = () => {
       if (!plateBox) {
         console.log("Primary Plate Model failed. Attempting Fallback...");
         const pRes2 = await fetch(
-          `/api/roboflow/${MODEL_CAR}?api_key=${ROBOFLOW_API_KEY}`,
+          `https://detect.roboflow.com/${MODEL_CAR}?api_key=${ROBOFLOW_API_KEY}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
