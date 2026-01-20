@@ -9,13 +9,9 @@ import {
   FileText,
   MapPin,
   Activity,
-  Home,
   Shield,
-  ChevronDown,
   Menu,
-  X,
-  Eye,
-  EyeOff
+  X
 } from "lucide-react";
 import { Boxes } from "./ui/background-boxes";
 import { EvervaultCard, Icon } from "./ui/evervault-card";
@@ -26,33 +22,36 @@ import { checkAdminCredentials, fetchAllDetections } from "./services/adminServi
 
 
 
-const VehicleRecognitionSystem = () => {
-  /* ---------------- WELCOME DIALOG COMPONENT ---------------- */
-  const WelcomeDialog = ({ name, onClose }) => {
-    useEffect(() => {
-      const timer = setTimeout(onClose, 3000); // Auto close after 3s
-      return () => clearTimeout(timer);
-    }, [onClose]);
+/* ---------------- WELCOME DIALOG COMPONENT ---------------- */
+const WelcomeDialog = ({ name, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000); // Auto close after 3s
+    return () => clearTimeout(timer);
+  }, [onClose]);
 
-    return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="fixed bottom-8 right-8 z-50 pointer-events-none"
-      >
-        <div className="glass border border-cyan-500/30 bg-slate-900/90 p-6 rounded-xl shadow-2xl shadow-cyan-500/10 flex items-center gap-4 min-w-[300px]">
-          <div className="h-12 w-12 rounded-full bg-cyan-500/10 border border-cyan-500/50 flex items-center justify-center">
-            <Shield className="text-cyan-400 w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-lg font-mono font-bold text-white tracking-wide">WELCOME BACK</h3>
-            <p className="text-cyan-400 font-mono text-sm tracking-wider uppercase">&gt; {name}</p>
-          </div>
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9, y: 20 }}
+      className="fixed bottom-8 right-8 z-50 pointer-events-none"
+    >
+      <div className="glass border border-cyan-500/30 bg-slate-900/90 p-6 rounded-xl shadow-2xl shadow-cyan-500/10 flex items-center gap-4 min-w-[300px]">
+        <div className="h-12 w-12 rounded-full bg-cyan-500/10 border border-cyan-500/50 flex items-center justify-center">
+          <Shield className="text-cyan-400 w-6 h-6" />
         </div>
-      </motion.div>
-    );
-  };
+        <div>
+          <h3 className="text-lg font-mono font-bold text-white tracking-wide">WELCOME BACK</h3>
+          <p className="text-cyan-400 font-mono text-sm tracking-wider uppercase">&gt; {name}</p>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+
+const VehicleRecognitionSystem = () => {
+
 
 
   /* ---------------- BASIC STATE ---------------- */
@@ -74,12 +73,10 @@ const VehicleRecognitionSystem = () => {
   /* ---------------- RTO DATA STATE ---------------- */
   const [rtoStates, setRtoStates] = useState({});
   const [rtoDistricts, setRtoDistricts] = useState({});
-  const [fetchError, setFetchError] = useState(null);
 
   useEffect(() => {
     const loadRTOData = async () => {
-      const { rtoStates, rtoDistricts, error } = await fetchRTOData();
-      if (error) setFetchError(error);
+      const { rtoStates, rtoDistricts } = await fetchRTOData();
       setRtoStates(rtoStates || {});
       setRtoDistricts(rtoDistricts || {});
     };
@@ -87,11 +84,7 @@ const VehicleRecognitionSystem = () => {
   }, []);
 
   /* ---------------- DEBUG STATE ---------------- */
-  const [debugImage, setDebugImage] = useState(null);
-  const [rawOCR, setRawOCR] = useState("");
-  const [rawVehicleData, setRawVehicleData] = useState("");
-
-  /* ---------------- API CONFIG ---------------- */
+  const [inferenceTime, setInferenceTime] = useState(null);
   /* ---------------- API CONFIG ---------------- */
   const ROBOFLOW_API_KEY = import.meta.env.VITE_ROBOFLOW_API_KEY;
 
@@ -99,7 +92,7 @@ const VehicleRecognitionSystem = () => {
   const MODEL_VEHICLE = "car_name-mshpx/2";
   const MODEL_COLOR = "color-u7k6u/2";
   const MODEL_CAR = "car-detect-mceyl/4";
-  const MODEL_PLATE = "numplate-man88/1";
+  const MODEL_PLATE = "numplate-man88/2";
 
   /* ---------------- HELPER: PREPROCESS IMAGE ---------------- */
   const preprocessImage = (canvas) => {
@@ -232,184 +225,138 @@ const VehicleRecognitionSystem = () => {
       reader.onerror = (error) => reject(error);
     });
 
-  /* ---------------- ROBOFLOW CALL ---------------- */
+
   const runRoboflow = async () => {
     if (!imageFile) {
       alert("Please upload an image first");
       return;
     }
 
-    // Reset Debug Stats
-    setDebugImage(null);
-    setRawOCR("");
-    setRawVehicleData("");
+    setInferenceTime(null);
 
     try {
-      // 1. Setup
+      const startTime = performance.now();
       const imgElement = document.getElementById("preview-image");
       const fullBase64 = await toBase64(imageFile);
-      // Strip header for Roboflow
       const base64Body = fullBase64.split(',')[1];
 
-      // Reset Output for Feedback
-      let newOutput = {
-        vehicle: "Detecting...",
+      // Initial State
+      setOutput({
+        vehicle: "Analyzing...",
         color: "Analyzing...",
-        plate: "Locating...",
-        rto: "N/A"
+        plate: "Analyzing...",
+        rto: "Analyzing..."
+      });
+      setStatus("Processing...");
+
+      // Helper for API calls
+      const fetchModel = async (model) => {
+        const res = await fetch(`/api/roboflow/${model}?api_key=${ROBOFLOW_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: base64Body
+        });
+        if (!res.ok) throw new Error("Service unreachable");
+        return res.json();
       };
-      setOutput(newOutput);
 
-      // 2. Detect Vehicle
-      setStatus("Identifying Vehicle...");
-      const vRes = await fetch(
-        `/api/roboflow/${MODEL_VEHICLE}?api_key=${ROBOFLOW_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: base64Body
+      // Parallel Execution
+      const vehiclePromise = (async () => {
+        const t0 = performance.now();
+        const data = await fetchModel(MODEL_VEHICLE);
+        const t1 = performance.now();
+        setInferenceTime(Math.round(t1 - t0));
+        return data;
+      })();
+
+      const colorPromise = fetchModel(MODEL_COLOR);
+
+      const platePromise = (async () => {
+        try {
+          let pData = await fetchModel(MODEL_PLATE);
+          if (pData.predictions?.[0]) return pData.predictions[0];
+          // Fallback
+          let pData2 = await fetchModel(MODEL_CAR);
+          return pData2.predictions?.[0];
+        } catch (e) {
+          return null;
         }
-      );
-      if (!vRes.ok) throw new Error("Vehicle service unreachable");
-      const vData = await vRes.json();
-      setRawVehicleData(JSON.stringify(vData.predictions, null, 2)); // DEBUG RAW RESPONSE
+      })();
+
+      const [vData, cData, plateBox] = await Promise.all([vehiclePromise, colorPromise, platePromise]);
+
+      // Process Results
       const vehicleClass = vData.predictions?.[0]?.class || "Unknown";
-      newOutput.vehicle = vehicleClass;
-      setOutput({ ...newOutput });
-
-      // 3. Detect Color
-      setStatus("Analyzing Color...");
-      const cRes = await fetch(
-        `/api/roboflow/${MODEL_COLOR}?api_key=${ROBOFLOW_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: base64Body
-        }
-      );
-      if (!cRes.ok) throw new Error("Color service unreachable");
-      const cData = await cRes.json();
       const colorClass = cData.predictions?.[0]?.class || "Unknown";
-      newOutput.color = colorClass;
-      setOutput({ ...newOutput });
 
-      // 4. Detect Plate
-      setStatus("Locating Plate...");
-      let pRes = await fetch(
-        `/api/roboflow/${MODEL_PLATE}?api_key=${ROBOFLOW_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: base64Body
-        }
-      );
-      if (!pRes.ok) throw new Error("Plate service unreachable");
-      let pData = await pRes.json();
-      let plateBox = pData.predictions?.[0];
-
-      // FALLBACK DETECTOR: If primary model fails, try the secondary model
-      if (!plateBox) {
-        console.log("Primary Plate Model failed. Attempting Fallback...");
-        const pRes2 = await fetch(
-          `/api/roboflow/${MODEL_CAR}?api_key=${ROBOFLOW_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: base64Body
-          }
-        );
-        if (pRes2.ok) {
-          const pData2 = await pRes2.json();
-          plateBox = pData2.predictions?.[0];
-          if (plateBox) console.log("Fallback Model Success!");
-        }
-      }
+      let finalPlate = "Not Found";
+      let finalRto = "N/A";
 
       if (plateBox) {
-        setStatus("Reading Plate (OCR)...");
-
-        // CROP: Still crop to send only the plate
+        // Crop & Preprocess
         const cropCanvas = cropImage(imgElement, plateBox);
-        const processedDataUrl = preprocessImage(cropCanvas); // Uses Otsu's Binarization
-        setDebugImage(processedDataUrl);
+        const processedDataUrl = preprocessImage(cropCanvas);
 
-        // --- TESSERACT OCR ---
+        // OCR
         const { data: { text } } = await Tesseract.recognize(
           processedDataUrl,
           'eng',
           {
-            logger: m => console.log(m),
             tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -',
-            tessedit_pageseg_mode: '7', // Single Line mode
+            tessedit_pageseg_mode: '7',
           }
         );
 
-        // Smart Regex Extraction for Indian Plates
         let rawText = text.replace(/[^A-Z0-9]/g, "");
-        console.log("Raw OCR Text:", rawText);
-        setRawOCR(rawText);
 
-        // 1. Try Strict Regex (Standard Indian Format)
         const strictMatch = rawText.match(/([A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{3,4})/);
 
-        let finalPlate = null;
+        let plateStr = null;
         if (strictMatch) {
-          finalPlate = strictMatch[0];
-        } else {
-          // 2. Fallback: If strict fails, show raw if meaningful length
-          // Relaxed Minimum length to 4 to capture just State+District (e.g. KA19)
-          if (rawText.length >= 4 && rawText.length <= 12) {
-            finalPlate = rawText + "?"; // Mark as uncertain
-          }
+          plateStr = strictMatch[0];
+        } else if (rawText.length >= 4 && rawText.length <= 12) {
+          plateStr = rawText + "?";
         }
 
-        newOutput.plate = finalPlate || "Unclear";
+        finalPlate = plateStr || "Unclear";
 
-        // Determine Region logic - Try with rawText if finalPlate is missing/partial
-        const textToAnalyze = finalPlate ? finalPlate.replace("?", "") : rawText;
-
+        // RTO Logic
+        const textToAnalyze = finalPlate !== "Unclear" ? finalPlate.replace("?", "") : rawText;
         if (textToAnalyze && textToAnalyze.length >= 2) {
           const stateCode = textToAnalyze.substring(0, 2);
-          // Only check district if we have at least 4 chars (KA19)
           const districtCode = textToAnalyze.length >= 4 ? textToAnalyze.substring(0, 4) : null;
-
-          // Lookup in fetched data
           const district = districtCode ? rtoDistricts[districtCode] : null;
           const state = rtoStates[stateCode];
 
-          if (district && state) {
-            newOutput.rto = `${district}, ${state}`;
-          } else if (state) {
-            newOutput.rto = state;
-          } else {
-            newOutput.rto = "Unknown Region";
-          }
-        } else {
-          newOutput.rto = "N/A";
+          if (district && state) finalRto = `${district}, ${state}`;
+          else if (state) finalRto = state;
+          else finalRto = "Unknown Region";
         }
-      } else {
-        newOutput.plate = "Not Found";
-        newOutput.rto = "N/A";
       }
 
-      setOutput(newOutput);
+      const finalOutput = {
+        vehicle: vehicleClass,
+        color: colorClass,
+        plate: finalPlate,
+        rto: finalRto
+      };
+
+      setOutput(finalOutput);
+      const endTime = performance.now();
+      setInferenceTime(Math.round(endTime - startTime));
       setStatus("Analysis Complete");
 
-      // 5. Save Record to Database (if valid plate found)
-      if (newOutput.plate && newOutput.plate !== "Unclear" && newOutput.plate !== "Not Found") {
+      // Save to DB
+      if (finalOutput.plate && finalOutput.plate !== "Unclear" && finalOutput.plate !== "Not Found") {
         setStatus("Saving to Database...");
         const saveResult = await saveDetection({
-          car_name: newOutput.vehicle,
-          color: newOutput.color,
-          plate_number: newOutput.plate,
-          rto: newOutput.rto
+          car_name: finalOutput.vehicle,
+          color: finalOutput.color,
+          plate_number: finalOutput.plate,
+          rto: finalOutput.rto
         });
-
-        if (saveResult.success) {
-          setStatus("Saved Successfully");
-        } else {
-          setStatus(`Save Failed: ${saveResult.error}`);
-        }
+        if (saveResult.success) setStatus("Saved Successfully");
+        else setStatus(`Save Failed: ${saveResult.error}`);
       }
 
     } catch (err) {
@@ -500,20 +447,15 @@ const VehicleRecognitionSystem = () => {
         <div className="relative z-20 flex flex-col items-center">
           <div className="h-1 w-24 bg-gradient-to-r from-transparent via-cyan-500 to-transparent mb-8" />
           <h1 className={cn("text-5xl md:text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60 relative z-20 tracking-tight")}>
-            AI Vehicle Recognition
+            Vehicle Recognition System
           </h1>
-          <p className="mt-4 text-slate-400 font-mono text-sm tracking-[0.3em] uppercase opacity-70">
-            Next Gen Computer Vision
-          </p>
         </div>
       </div>
 
       {/* INTRO TEXT */}
-      <div className="max-w-4xl mx-auto text-center px-6">
+      <div className="max-w-7xl mx-auto text-center px-6">
         <p className="text-xl md:text-2xl text-slate-200 leading-relaxed font-light">
-          An intelligent computer vision system to <span className="text-cyan-400 font-normal">detect vehicles</span>,
-          recognize <span className="text-purple-400 font-normal">number plates</span>, and
-          classify <span className="text-green-400 font-normal">vehicle attributes</span> using deep learning.
+          This project presents an <span className="text-cyan-400 font-normal">advanced vehicle detection system</span> built using deep learning and the Roboflow platform. It enables accurate <span className="text-purple-400 font-normal">identification and localization</span> of multiple vehicle types from images using object detection techniques. Roboflow is utilized for dataset annotation, preprocessing, augmentation, and model training, ensuring efficiency and scalability. The system is suitable for applications in <span className="text-green-400 font-normal">traffic monitoring, surveillance, and intelligent transportation systems</span>
         </p>
         <div className="h-px w-32 bg-gradient-to-r from-transparent via-white/20 to-transparent mx-auto mt-8" />
       </div>
@@ -537,7 +479,7 @@ const VehicleRecognitionSystem = () => {
               <span className="text-xs font-mono text-cyan-400 tracking-[0.2em]">DETECT</span>
               <div className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
-                <span className="text-[10px] font-mono text-cyan-500/70 uppercase">Ready</span>
+                <span className="text-[10px] font-mono text-cyan-500/70 uppercase">ONLINE</span>
               </div>
             </div>
 
@@ -749,19 +691,7 @@ const VehicleRecognitionSystem = () => {
                   alt="Preview"
                   className="max-h-64 object-contain rounded border border-slate-700 mx-auto"
                 />
-                {debugImage && (
-                  <div className="bg-slate-800 p-2 rounded border border-yellow-500/50 w-full">
-                    <p className="text-[10px] text-yellow-500 font-mono mb-1">AI VISION DEBUG (Processed Plate):</p>
-                    <img src={debugImage} className="w-full object-contain border border-white/10" />
-                    <p className="text-[10px] text-slate-400 font-mono mt-1 break-all">RAW OCR: {rawOCR}</p>
-                  </div>
-                )}
-                {rawVehicleData && (
-                  <div className="bg-slate-800 p-2 rounded max-h-32 overflow-auto w-full">
-                    <p className="text-[10px] text-cyan-500 font-mono mb-1">VEHICLE DEBUG:</p>
-                    <pre className="text-[8px] text-slate-400 whitespace-pre-wrap">{rawVehicleData}</pre>
-                  </div>
-                )}
+
               </div>
             ) : (
               <div className="text-center space-y-2 pointer-events-none">
@@ -814,9 +744,7 @@ const VehicleRecognitionSystem = () => {
 
           <div className="mt-auto pt-6 border-t border-white/5">
             <p className="text-[10px] text-slate-600 font-mono text-center">
-              SYSTEM CONFIDENCE: 98.4%  LATENCY: 42ms <br />
-              DEBUG: States Loaded: {Object.keys(rtoStates).length}, Districts Loaded: {Object.keys(rtoDistricts).length} <br />
-              {fetchError && <span className="text-red-500 font-bold block mt-1">FETCH ERROR: {fetchError.message || fetchError}</span>}
+              {inferenceTime && <span>INFERENCE TIME: <span className="text-cyan-400">{inferenceTime}ms</span></span>}
             </p>
           </div>
         </div>
