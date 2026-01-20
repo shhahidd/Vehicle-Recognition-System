@@ -195,7 +195,6 @@ const VehicleRecognitionSystem = () => {
     finalCtx.drawImage(scaledCanvas, padding, padding);
 
     const processedUrl = finalCanvas.toDataURL("image/png");
-    setDebugImage(processedUrl); // <--- SAVE FOR UI DEBUGGING
     return processedUrl;
   };
 
@@ -260,6 +259,7 @@ const VehicleRecognitionSystem = () => {
         return res.json();
       };
 
+
       // Parallel Execution
       const vehiclePromise = (async () => {
         const t0 = performance.now();
@@ -278,7 +278,7 @@ const VehicleRecognitionSystem = () => {
           // Fallback
           let pData2 = await fetchModel(MODEL_CAR);
           return pData2.predictions?.[0];
-        } catch (e) {
+        } catch {
           return null;
         }
       })();
@@ -287,10 +287,13 @@ const VehicleRecognitionSystem = () => {
 
       // Process Results
       const vehicleClass = vData.predictions?.[0]?.class || "Unknown";
+
       const colorClass = cData.predictions?.[0]?.class || "Unknown";
+
 
       let finalPlate = "Not Found";
       let finalRto = "N/A";
+
 
       if (plateBox) {
         // Crop & Preprocess
