@@ -11,7 +11,10 @@ import {
   Activity,
   Shield,
   Menu,
-  X
+  X,
+  Eye,
+  EyeOff,
+  ChevronDown
 } from "lucide-react";
 import { Boxes } from "./ui/background-boxes";
 import { EvervaultCard, Icon } from "./ui/evervault-card";
@@ -99,8 +102,8 @@ const VehicleRecognitionSystem = () => {
     const width = canvas.width;
     const height = canvas.height;
 
-    // 1. Upscale (4x) - Higher resolution for sharper details
-    const scaleFactor = 4;
+    // 1. Upscale (3x) - Sufficient for OCR without adding too much noise
+    const scaleFactor = 3;
     const scaledCanvas = document.createElement("canvas");
     scaledCanvas.width = width * scaleFactor;
     scaledCanvas.height = height * scaleFactor;
@@ -131,61 +134,33 @@ const VehicleRecognitionSystem = () => {
     }
 
     // Step B: Contrast Stretching (Normalization)
-    // This ensures we use the full 0-255 dynamic range, improving binarization in shadows
+    // This ensures we use the full 0-255 dynamic range
     const range = maxVal - minVal;
     if (range > 0) {
       for (let i = 0; i < grayData.length; i++) {
-        grayData[i] = ((grayData[i] - minVal) / range) * 255;
+        // Apply contrast stretching and update the image data directly
+        const newVal = Math.floor(((grayData[i] - minVal) / range) * 255);
+        const idx = i * 4;
+        data[idx] = newVal;     // R
+        data[idx + 1] = newVal; // G
+        data[idx + 2] = newVal; // B
+      }
+    } else {
+      // Fallback if range is 0 (solid color image)
+      for (let i = 0; i < grayData.length; i++) {
+        const val = grayData[i];
+        const idx = i * 4;
+        data[idx] = val;
+        data[idx + 1] = val;
+        data[idx + 2] = val;
       }
     }
 
-    // Step C: Build Histogram (on refined gray data)
-    const histogram = new Array(256).fill(0);
-    for (let i = 0; i < grayData.length; i++) {
-      histogram[Math.floor(grayData[i])]++;
-    }
-
-    // Step D: Calculate Otsu's Threshold
-    let total = grayData.length;
-    let sum = 0;
-    for (let i = 0; i < 256; i++) sum += i * histogram[i];
-
-    let sumB = 0;
-    let wB = 0;
-    let wF = 0;
-    let maxVar = 0;
-    let threshold = 0;
-
-    for (let t = 0; t < 256; t++) {
-      wB += histogram[t];
-      if (wB === 0) continue;
-      wF = total - wB;
-      if (wF === 0) break;
-
-      sumB += t * histogram[t];
-      let mB = sumB / wB;
-      let mF = (sum - sumB) / wF;
-
-      let varBetween = wB * wF * (mB - mF) * (mB - mF);
-      if (varBetween > maxVar) {
-        maxVar = varBetween;
-        threshold = t;
-      }
-    }
-
-    // Step E: Apply Threshold (Binarize)
-    // console.log("Otsu Threshold:", threshold);
-
-    for (let i = 0; i < data.length; i += 4) {
-      // If > threshold, set to White (Background), else Black (Text)
-      const val = (grayData[i / 4] > threshold) ? 255 : 0;
-      data[i] = data[i + 1] = data[i + 2] = val;
-    }
     scaledCtx.putImageData(imageData, 0, 0);
 
-    // 3. Add Padding (White Border) helps Tesseract assume isolated text
+    // 3. Add Padding (White Border) - Helps Tesseract
     const finalCanvas = document.createElement("canvas");
-    const padding = 40; // Increased padding
+    const padding = 20;
     finalCanvas.width = scaledCanvas.width + (padding * 2);
     finalCanvas.height = scaledCanvas.height + (padding * 2);
     const finalCtx = finalCanvas.getContext("2d");
@@ -194,8 +169,7 @@ const VehicleRecognitionSystem = () => {
     finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
     finalCtx.drawImage(scaledCanvas, padding, padding);
 
-    const processedUrl = finalCanvas.toDataURL("image/png");
-    return processedUrl;
+    return finalCanvas.toDataURL("image/png");
   };
 
   /* ---------------- HELPER: CROP IMAGE ---------------- */
@@ -305,12 +279,15 @@ const VehicleRecognitionSystem = () => {
           processedDataUrl,
           'eng',
           {
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -',
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-', // Allow hyphens
             tessedit_pageseg_mode: '7',
           }
         );
 
+        console.log("OCR Original Text:", text);
+
         let rawText = text.replace(/[^A-Z0-9]/g, "");
+        console.log("OCR Cleaned Text:", rawText);
 
         const strictMatch = rawText.match(/([A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{3,4})/);
 
@@ -318,6 +295,7 @@ const VehicleRecognitionSystem = () => {
         if (strictMatch) {
           plateStr = strictMatch[0];
         } else if (rawText.length >= 4 && rawText.length <= 12) {
+          // Fallback: Return what we have if it looks somewhat like a plate
           plateStr = rawText + "?";
         }
 
