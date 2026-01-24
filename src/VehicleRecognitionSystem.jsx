@@ -9,6 +9,7 @@ import {
   FileText,
   MapPin,
   Activity,
+
   Shield,
   Menu,
   X,
@@ -16,6 +17,7 @@ import {
   EyeOff,
   ChevronDown
 } from "lucide-react";
+
 import { Boxes } from "./ui/background-boxes";
 import { EvervaultCard, Icon } from "./ui/evervault-card";
 import { cn } from "./lib/utils";
@@ -92,10 +94,11 @@ const VehicleRecognitionSystem = () => {
   const ROBOFLOW_API_KEY = import.meta.env.VITE_ROBOFLOW_API_KEY;
 
 
-  const MODEL_VEHICLE = "car_name-mshpx/2";
-  const MODEL_COLOR = "color-u7k6u/2";
-  const MODEL_CAR = "car-detect-mceyl/4";
-  const MODEL_PLATE = "numplate-man88/2";
+  const MODEL_CAR = "cardetect-sqw39/5";
+  const MODEL_PLATE = "numplate-man88/3";
+  const MODEL_VEHICLE = "carname-bshdp/3";
+  const MODEL_COLOR = "carcolor-jtarq/3";
+
 
   /* ---------------- HELPER: PREPROCESS IMAGE ---------------- */
   const preprocessImage = (canvas) => {
@@ -199,8 +202,10 @@ const VehicleRecognitionSystem = () => {
     });
 
 
-  const runRoboflow = async () => {
-    if (!imageFile) {
+  const runRoboflow = async (inputBlob = null) => {
+    const fileToProcess = inputBlob || imageFile;
+
+    if (!fileToProcess) {
       alert("Please upload an image first");
       return;
     }
@@ -209,8 +214,22 @@ const VehicleRecognitionSystem = () => {
 
     try {
       const startTime = performance.now();
-      const imgElement = document.getElementById("preview-image");
-      const fullBase64 = await toBase64(imageFile);
+
+      // Handle Image Source for Cropping
+      let sourceImageByUser = null;
+      if (inputBlob) {
+        // If input is a blob (from camera/video frame), create an Image object for cropping later
+        const url = URL.createObjectURL(inputBlob);
+        const img = new Image();
+        img.src = url;
+        await new Promise(r => img.onload = r);
+        sourceImageByUser = img;
+      } else {
+        // Standard image file upload
+        sourceImageByUser = document.getElementById("preview-image");
+      }
+
+      const fullBase64 = await toBase64(fileToProcess);
       const base64Body = fullBase64.split(',')[1];
 
       // Initial State
@@ -224,7 +243,7 @@ const VehicleRecognitionSystem = () => {
 
       // Helper for API calls
       const fetchModel = async (model) => {
-        const res = await fetch(`/api/roboflow/${model}?api_key=${ROBOFLOW_API_KEY}`, {
+        const res = await fetch(`https://detect.roboflow.com/${model}?api_key=${ROBOFLOW_API_KEY}`, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: base64Body
@@ -271,7 +290,7 @@ const VehicleRecognitionSystem = () => {
 
       if (plateBox) {
         // Crop & Preprocess
-        const cropCanvas = cropImage(imgElement, plateBox);
+        const cropCanvas = cropImage(sourceImageByUser, plateBox);
         const processedDataUrl = preprocessImage(cropCanvas);
 
         // OCR
@@ -641,97 +660,112 @@ const VehicleRecognitionSystem = () => {
   );
 
   /* ---------------- ANALYZE PAGE ---------------- */
-  const AnalyzePage = () => (
-    <div className="grid md:grid-cols-2 gap-8">
-      <div className="glass rounded-xl p-1 border border-white/10 relative overflow-hidden group">
-        <div className="absolute top-0 left-0 w-full h-1 bg-cyan-500/20"></div>
-        <div className="p-6 space-y-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-sm font-mono tracking-widest text-cyan-400">INPUT STATION</h2>
-            <div className="h-2 w-2 bg-cyan-500 rounded-full animate-ping"></div>
+  const AnalyzePage = () => {
+
+
+
+    const handleAnalyze = async () => {
+      if (imageFile) {
+        runRoboflow(imageFile);
+      } else {
+        alert("Please upload an image first");
+      }
+    };
+
+
+    return (
+      <div className="grid md:grid-cols-2 gap-8">
+        <div className="glass rounded-xl p-1 border border-white/10 relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-cyan-500/20"></div>
+          <div className="p-6 space-y-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-sm font-mono tracking-widest text-cyan-400">INPUT STATION</h2>
+            </div>
+
+            <div className="border-2 border-dashed border-slate-700 rounded-lg p-0 bg-black/40 overflow-hidden relative min-h-[300px] flex flex-col items-center justify-center transition-colors hover:border-cyan-500/50">
+
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  setImageFile(file);
+                  setImageURL(URL.createObjectURL(file));
+                }}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+              />
+
+              {imageURL ? (
+                <div className="w-full h-full flex items-center justify-center bg-black/50">
+                  <img
+                    id="preview-image"
+                    src={imageURL}
+                    alt="Preview"
+                    className="max-h-80 w-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="text-center space-y-2 pointer-events-none z-10 p-8">
+                  <Upload className="w-10 h-10 text-slate-500 mx-auto mb-2" />
+                  <p className="text-sm font-mono text-slate-400">DROP IMAGE FILE</p>
+                  <p className="text-xs text-slate-600 uppercase tracking-wide">Supports JPG, PNG</p>
+                </div>
+              )}
+
+
+            </div>
+
+            <button
+              onClick={handleAnalyze}
+              className="w-full py-4 rounded bg-cyan-500/10 border border-cyan-500/50 text-cyan-400 font-mono tracking-widest hover:bg-cyan-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-3 uppercase text-sm"
+            >
+              <Scan size={18} />
+              Analyze Frame
+            </button>
+
+            <div className="flex items-center gap-2 text-xs font-mono text-slate-500">
+              <span>STATUS:</span>
+              <span className={cn("text-cyan-400", status !== "Idle" && "animate-pulse")}>{status}</span>
+            </div>
           </div>
+        </div>
 
-          <div className="border-2 border-dashed border-slate-700 rounded-lg p-8 flex flex-col items-center justify-center transition-colors hover:border-cyan-500/50 hover:bg-slate-900/50 relative">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                setImageFile(file);
-                setImageURL(URL.createObjectURL(file));
-              }}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-            />
+        <div className="glass rounded-xl p-1 border border-white/10 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-purple-500/20"></div>
+          <div className="p-6 h-full flex flex-col">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-sm font-mono tracking-widest text-purple-400">ANALYSIS DATA</h2>
+              <Activity size={16} className="text-purple-500" />
+            </div>
 
-            {imageURL ? (
-              <div className="flex flex-col gap-4 w-full">
-                <img
-                  id="preview-image"
-                  src={imageURL}
-                  alt="Preview"
-                  className="max-h-64 object-contain rounded border border-slate-700 mx-auto"
-                />
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { label: "VEHICLE NAME", icon: Car, value: output.vehicle, color: "text-cyan-400" },
+                { label: "VEHICLE COLOR", icon: Palette, value: output.color, color: "text-purple-400" },
+                { label: "PLATE NUMBER", icon: FileText, value: output.plate, color: "text-green-400" },
+                { label: "RTO REGION", icon: MapPin, value: output.rto, color: "text-pink-400" }
+              ].map((item, i) => (
+                <div key={i} className="bg-slate-900/50 p-4 rounded border border-white/5 relative group hover:border-white/20 transition-colors">
+                  <item.icon className={cn("absolute top-3 right-3 w-4 h-4 opacity-50", item.color)} />
+                  <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-2">{item.label}</p>
+                  <p className={cn("text-lg font-mono font-bold tracking-tight text-white", item.value === "Pending..." && "animate-pulse")}>
+                    {item.value || "---"}
+                  </p>
+                </div>
+              ))}
+            </div>
 
-              </div>
-            ) : (
-              <div className="text-center space-y-2 pointer-events-none">
-                <Upload className="w-10 h-10 text-slate-500 mx-auto mb-2" />
-                <p className="text-sm font-mono text-slate-400">DROP IMAGE FILE</p>
-                <p className="text-xs text-slate-600 uppercase tracking-wide">Supports JPG, PNG</p>
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={runRoboflow}
-            className="w-full py-4 rounded bg-cyan-500/10 border border-cyan-500/50 text-cyan-400 font-mono tracking-widest hover:bg-cyan-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-3 uppercase text-sm"
-          >
-            <Scan size={18} />
-            Analyze
-          </button>
-
-          <div className="flex items-center gap-2 text-xs font-mono text-slate-500">
-            <span>STATUS:</span>
-            <span className={cn("text-cyan-400", status !== "Idle" && "animate-pulse")}>{status}</span>
+            <div className="mt-auto pt-6 border-t border-white/5">
+              <p className="text-[10px] text-slate-600 font-mono text-center">
+                {inferenceTime && <span>INFERENCE TIME: <span className="text-cyan-400">{inferenceTime}ms</span></span>}
+              </p>
+            </div>
           </div>
         </div>
       </div>
-
-      <div className="glass rounded-xl p-1 border border-white/10 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1 bg-purple-500/20"></div>
-        <div className="p-6 h-full flex flex-col">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-sm font-mono tracking-widest text-purple-400">ANALYSIS DATA</h2>
-            <Activity size={16} className="text-purple-500" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              { label: "VEHICLE CLASS", icon: Car, value: output.vehicle, color: "text-cyan-400" },
-              { label: "COLOR DETECT", icon: Palette, value: output.color, color: "text-purple-400" },
-              { label: "PLATE NUMBER", icon: FileText, value: output.plate, color: "text-green-400" },
-              { label: "REG REGION", icon: MapPin, value: output.rto, color: "text-pink-400" }
-            ].map((item, i) => (
-              <div key={i} className="bg-slate-900/50 p-4 rounded border border-white/5 relative group hover:border-white/20 transition-colors">
-                <item.icon className={cn("absolute top-3 right-3 w-4 h-4 opacity-50", item.color)} />
-                <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-2">{item.label}</p>
-                <p className={cn("text-lg font-mono font-bold tracking-tight text-white", item.value === "Pending..." && "animate-pulse")}>
-                  {item.value || "---"}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-auto pt-6 border-t border-white/5">
-            <p className="text-[10px] text-slate-600 font-mono text-center">
-              {inferenceTime && <span>INFERENCE TIME: <span className="text-cyan-400">{inferenceTime}ms</span></span>}
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   /* ---------------- ADMIN LOGIN ---------------- */
   const AdminPage = () => {
@@ -889,11 +923,8 @@ const VehicleRecognitionSystem = () => {
           <div className="relative z-20 flex flex-col items-center">
             <div className="h-1 w-24 bg-gradient-to-r from-transparent via-red-500 to-transparent mb-8" />
             <h1 className={cn("text-4xl md:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60 relative z-20 tracking-tight")}>
-              Secure Terminal
+              Detections Terminal
             </h1>
-            <p className="mt-4 text-slate-400 font-mono text-sm tracking-[0.3em] uppercase opacity-70">
-              Authorized Access  Admin Level 1
-            </p>
           </div>
         </div>
 
@@ -908,7 +939,6 @@ const VehicleRecognitionSystem = () => {
                   <Activity className="text-red-500" size={20} />
                   DETECTION LOGS
                 </h2>
-                <p className="text-xs text-slate-500 font-mono mt-1">LIVE DATABASE FEED  READ ONLY</p>
               </div>
 
               <button onClick={() => setPage("home")} className="px-6 py-2 border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-white rounded transition-all text-xs font-mono tracking-wider flex items-center gap-2">

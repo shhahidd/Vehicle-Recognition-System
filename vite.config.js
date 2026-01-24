@@ -16,13 +16,5 @@ export default defineConfig({
     },
   },
   server: {
-    proxy: {
-      "/api/roboflow": {
-        target: "https://detect.roboflow.com",
-        changeOrigin: true,
-        secure: false,
-        rewrite: (path) => path.replace(/^\/api\/roboflow/, ""),
-      },
-    },
   },
 })
